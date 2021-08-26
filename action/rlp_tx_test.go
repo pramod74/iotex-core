@@ -3,6 +3,7 @@ package action
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -374,4 +375,166 @@ func convertToNativeProto(tx *types.Transaction, isTsf bool) *iotextypes.ActionC
 		}
 	}
 	return &pb
+}
+
+func TestRawData(t *testing.T) {
+	// register the extern chain ID
+	config.SetEVMNetworkID(config.Default.Chain.EVMNetworkID)
+	require := require.New(t)
+	addr1, err := address.FromString("io143av880x0xce4tsy9sxwr8avhphq5sghum77ct")
+	require.NoError(err)
+	addr2, err := address.FromString("io1x9qa70ewgs24xwak66lz5dgm9ku7ap80vw3070")
+	require.NoError(err)
+	addr3, err := address.FromString("io1mflp9m6hcgm2qcghchsdqj3z3eccrnekx9p0ms")
+	require.NoError(err)
+
+	// create staking action
+	pvk, err := crypto.GenerateKey()
+	require.NoError(err)
+	ab := AbstractAction{
+		version:   1,
+		nonce:     2,
+		gasLimit:  100000,
+		gasPrice:  big.NewInt(1000000),
+		srcPubkey: pvk.PublicKey(),
+	}
+
+	testCases := []struct {
+		Action
+		addrHash address.Hash160
+		dataLen  int
+	}{
+		{
+			&CreateStake{
+				AbstractAction: ab,
+				amount:         big.NewInt(100),
+				payload:        signByte,
+			},
+			address.StakingCreateAddrHash,
+			16,
+		},
+		{
+			&DepositToStake{
+				AbstractAction: ab,
+				bucketIndex:    1,
+				amount:         big.NewInt(100),
+				payload:        signByte,
+			},
+			address.StakingAddDepositAddrHash,
+			18,
+		},
+		{
+			&ChangeCandidate{
+				AbstractAction: ab,
+				bucketIndex:    1,
+				candidateName:  "test",
+				payload:        signByte,
+			},
+			address.StakingChangeCandAddrHash,
+			19,
+		},
+		{
+			&Unstake{
+				reclaimStake{
+					AbstractAction: ab,
+					bucketIndex:    1,
+					payload:        signByte,
+				},
+			},
+			address.StakingUnstakeAddrHash,
+			13,
+		},
+		{
+			&WithdrawStake{
+				reclaimStake{
+					AbstractAction: ab,
+					bucketIndex:    1,
+					payload:        signByte,
+				},
+			},
+			address.StakingWithdrawAddrHash,
+			13,
+		},
+		{
+			&Restake{
+				AbstractAction: ab,
+				bucketIndex:    1,
+				duration:       10,
+				autoStake:      false,
+				payload:        signByte,
+			},
+			address.StakingRestakeAddrHash,
+			15,
+		},
+		{
+			&TransferStake{
+				AbstractAction: ab,
+				voterAddress:   addr1,
+				bucketIndex:    1,
+				payload:        signByte,
+			},
+			address.StakingTransferAddrHash,
+			56,
+		},
+		{
+			&CandidateRegister{
+				AbstractAction:  ab,
+				name:            "test",
+				operatorAddress: addr1,
+				rewardAddress:   addr2,
+				ownerAddress:    addr3,
+				amount:          big.NewInt(100),
+				duration:        10,
+				autoStake:       false,
+				payload:         signByte,
+			},
+			address.StakingRegisterCandAddrHash,
+			155,
+		},
+		{
+			&CandidateUpdate{
+				AbstractAction:  ab,
+				name:            "test",
+				operatorAddress: addr1,
+				rewardAddress:   addr2,
+			},
+			address.StakingUpdateCandAddrHash,
+			92,
+		},
+	}
+
+	for i, stakingAct := range testCases {
+		fmt.Printf("Act %d:\n", i)
+		// special addr of staking action
+		addr, _ := address.FromBytes(stakingAct.addrHash[:])
+		fmt.Printf("special addr = %s\n", addr)
+
+		// convert staking action into native tx
+		rlpAct, err := actionToRLP(stakingAct.Action)
+		require.NoError(err)
+		sig := GetRLPSig(stakingAct.Action, pvk)
+		signer := types.NewEIP155Signer(big.NewInt(int64(config.EVMNetworkID())))
+
+		// sign tx
+		signedTx, err := reconstructSignedRlpTxFromSig(rlpAct, config.EVMNetworkID(), sig)
+		require.NoError(err)
+		encoded, err := rlp.EncodeToBytes(signedTx)
+		require.NoError(err)
+		signedTxHex := hex.EncodeToString(encoded[:])
+		rawHash := signer.Hash(signedTx)
+		fmt.Printf("rawHash = %x\n", rawHash)
+		fmt.Printf("signed TX = %s\n", signedTxHex)
+
+		h, err := rlpSignedHash(rlpAct, config.EVMNetworkID(), sig)
+		require.NoError(err)
+		fmt.Printf("signed TX hash = %x\n", h)
+
+		// recover public key
+		pubk, err := crypto.RecoverPubkey(rawHash[:], sig)
+		require.NoError(err)
+		require.Equal(pubk.HexString(), pvk.PublicKey().HexString())
+		require.True(pvk.PublicKey().Verify(rawHash[:], sig))
+		fmt.Printf("publicKey = %s\n", pubk.HexString())
+		fmt.Printf("publicKey hash = %s\n\n", hex.EncodeToString(pubk.Hash()))
+	}
 }

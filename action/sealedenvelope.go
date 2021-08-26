@@ -70,6 +70,10 @@ func (sealed *SealedEnvelope) Encoding() uint32 {
 	return uint32(sealed.encoding)
 }
 
+func (sealed *SealedEnvelope) NetworkID() uint32 {
+	return sealed.evmNetworkID
+}
+
 // Proto converts it to it's proto scheme.
 func (sealed *SealedEnvelope) Proto() *iotextypes.Action {
 	return &iotextypes.Action{

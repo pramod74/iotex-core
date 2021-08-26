@@ -8,6 +8,7 @@ package blockchain
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -94,6 +95,8 @@ type (
 
 		// RemoveSubscriber make you listen to every single produced block
 		RemoveSubscriber(BlockCreationSubscriber) error
+
+		GetActionByHash(hash.Hash256, uint64) bool
 	}
 	// BlockBuilderFactory is the factory interface of block builder
 	BlockBuilderFactory interface {
@@ -426,6 +429,27 @@ func (bc *blockchain) RemoveSubscriber(s BlockCreationSubscriber) error {
 	defer bc.mu.Unlock()
 
 	return bc.pubSubManager.RemoveBlockListener(s)
+}
+
+func (bc *blockchain) GetActionByHash(h hash.Hash256, height uint64) bool {
+	env, _, err := bc.dao.GetActionByActionHash(h, height)
+	if err != nil {
+		return false
+	}
+	fmt.Printf("encoding: %d\n", env.Encoding())
+	fmt.Printf("networkID: %d\n", env.NetworkID())
+	fmt.Printf("signature: %x\n", env.Signature())
+	e := env.Envelope
+	fmt.Printf("version: %d\n", e.Version())
+	fmt.Printf("nonce: %d\n", e.Nonce())
+	fmt.Printf("limit: %d\n", e.GasLimit())
+	fmt.Printf("price: %s\n", e.GasPrice().String())
+	stk := e.Action().(*action.CreateStake)
+	fmt.Printf("name: %s\n", stk.Candidate())
+	fmt.Printf("amount: %s\n", stk.Amount().String())
+	fmt.Printf("duration: %d\n", stk.Duration())
+	fmt.Printf("auto: %v\n", stk.AutoStake())
+	return true
 }
 
 //======================================

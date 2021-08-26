@@ -74,6 +74,10 @@ var (
 	postGrPostStore *big.Int
 )
 
+var (
+	actHashTmp hash.Hash256
+)
+
 func addTestingConstantinopleBlocks(bc blockchain.Blockchain, dao blockdao.BlockDAO, sf factory.Factory, ap actpool.ActPool) error {
 	// Add block 1
 	priKey0 := identityset.PrivateKey(27)
@@ -245,6 +249,9 @@ func addTestingConstantinopleBlocks(bc blockchain.Blockchain, dao blockdao.Block
 }
 
 func addTestingTsfBlocks(cfg config.Config, bc blockchain.Blockchain, dao blockdao.BlockDAO, ap actpool.ActPool) error {
+	// register the extern chain ID
+	config.SetEVMNetworkID(config.Default.Chain.EVMNetworkID)
+
 	// Add block 1
 	addr0 := identityset.Address(27).String()
 	tsf0, err := action.SignedTransfer(addr0, identityset.PrivateKey(0), 1, big.NewInt(90000000), nil, testutil.TestGasLimit, big.NewInt(testutil.TestGasPriceInt64))
@@ -275,6 +282,7 @@ func addTestingTsfBlocks(cfg config.Config, bc blockchain.Blockchain, dao blockd
 	addr5 := identityset.Address(32).String()
 	priKey5 := identityset.PrivateKey(32)
 	addr6 := identityset.Address(33).String()
+	priKey7 := identityset.PrivateKey(26)
 	// Add block 2
 	// test --> A, B, C, D, E, F
 	tsf1, err := action.SignedTransfer(addr1, priKey0, 1, big.NewInt(20), []byte{}, testutil.TestGasLimit, big.NewInt(testutil.TestGasPriceInt64))
@@ -517,6 +525,36 @@ func addTestingTsfBlocks(cfg config.Config, bc blockchain.Blockchain, dao blockd
 	if err != nil {
 		return err
 	}
+	if err := bc.CommitBlock(blk); err != nil {
+		return err
+	}
+	ap.Reset()
+
+	// Add block 6
+	stkAct0, err := action.SignedRLPCreateStake(
+		1,
+		"robotbp00001",
+		"100000000000000000000",
+		0,
+		false,
+		[]byte{},
+		testutil.TestGasLimit, big.NewInt(unit.Qev),
+		priKey7)
+	if err != nil {
+		return err
+	}
+	actHashTmp, err = stkAct0.Hash()
+	fmt.Printf("Act signed hash: %x\n", actHashTmp)
+	if err != nil {
+		return err
+	}
+	if err := ap.Add(context.Background(), stkAct0); err != nil {
+		return err
+	}
+	blk, err = bc.MintNewBlock(testutil.TimestampNow())
+	if err != nil {
+		return err
+	}
 	return bc.CommitBlock(blk)
 }
 
@@ -565,7 +603,8 @@ func TestCreateBlockchain(t *testing.T) {
 	// add 4 sample blocks
 	require.NoError(addTestingTsfBlocks(cfg, bc, nil, ap))
 	height = bc.TipHeight()
-	require.Equal(5, int(height))
+	require.Equal(6, int(height))
+	require.True(bc.GetActionByHash(actHashTmp, 6))
 }
 
 func TestGetBlockHash(t *testing.T) {
@@ -863,7 +902,7 @@ func TestBlockchain_MintNewBlock_PopAccount(t *testing.T) {
 	blk, err := bc.MintNewBlock(testutil.TimestampNow())
 	require.NoError(t, err)
 	require.NotNil(t, blk)
-	require.Equal(t, 183, len(blk.Actions))
+	require.Equal(t, 184, len(blk.Actions))
 	whetherInclude := false
 	for _, action := range blk.Actions {
 		transfer1Hash, err := transfer1.Hash()
@@ -1120,6 +1159,7 @@ func TestConstantinople(t *testing.T) {
 	cfg.Genesis.BeringBlockHeight = 8
 	cfg.Genesis.GreenlandBlockHeight = 9
 	cfg.Genesis.InitBalanceMap[identityset.Address(27).String()] = unit.ConvertIotxToRau(10000000000).String()
+	cfg.Genesis.InitBalanceMap[identityset.Address(26).String()] = unit.ConvertIotxToRau(10000000000).String()
 
 	t.Run("test Constantinople contract", func(t *testing.T) {
 		testValidateBlockchain(cfg, t)
