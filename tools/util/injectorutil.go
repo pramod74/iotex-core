@@ -9,6 +9,7 @@ package util
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -213,22 +214,39 @@ loop:
 				log.L().Error(err.Error())
 			}
 		rerand:
-			switch rand.Intn(3) {
+			switch rand.Intn(2) {
+			// case 0:
+			// 	sender, recipient, nonce, amount := createTransferInjection(counter, delegates)
+			// 	atomic.AddUint64(&totalTsfCreated, 1)
+			// 	go injectTransfer(wg, client, sender, recipient, nonce, amount, uint64(transferGasLimit),
+			// 		big.NewInt(transferGasPrice), transferPayload, retryNum, retryInterval, pendingActionMap)
 			case 0:
-				sender, recipient, nonce, amount := createTransferInjection(counter, delegates)
-				atomic.AddUint64(&totalTsfCreated, 1)
-				go injectTransfer(wg, client, sender, recipient, nonce, amount, uint64(transferGasLimit),
-					big.NewInt(transferGasPrice), transferPayload, retryNum, retryInterval, pendingActionMap)
-			case 1:
 				if fpToken == nil {
 					goto rerand
 				}
 				go injectFpTokenTransfer(wg, fpToken, fpContract, debtor, creditor)
-			case 2:
-				executor, nonce := createExecutionInjection(counter, delegates)
-				go injectExecInteraction(wg, client, executor, contract, nonce, big.NewInt(int64(executionAmount)),
-					uint64(executionGasLimit), big.NewInt(executionGasPrice),
-					executionData, retryNum, retryInterval, pendingActionMap)
+				// case 2:
+				// 	executor, nonce := createExecutionInjection(counter, delegates)
+				// 	go injectExecInteraction(wg, client, executor, contract, nonce, big.NewInt(int64(executionAmount)),
+				// 		uint64(executionGasLimit), big.NewInt(executionGasPrice),
+				// 		executionData, retryNum, retryInterval, pendingActionMap)
+			case 1:
+				sender, nonce := createExecutionInjection(counter, delegates)
+				go injectStake(
+					wg,
+					client,
+					sender,
+					nonce,
+					"100000000000000000000",
+					0,
+					false,
+					20000000,
+					big.NewInt(1000000000000),
+					"create state payload",
+					retryNum,
+					resetInterval,
+					pendingActionMap,
+				)
 			}
 		}
 	}
@@ -488,7 +506,6 @@ func injectStake(
 		log.L().Fatal("Failed to inject Stake", zap.Error(err))
 	}
 	log.L().Info("Created signed stake")
-
 	bo := backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Duration(retryInterval)*time.Second), uint64(retryNum))
 	if err := backoff.Retry(func() error {
 		_, err := c.SendAction(context.Background(), &iotexapi.SendActionRequest{Action: selp.Proto()})
@@ -501,9 +518,7 @@ func injectStake(
 			log.L().Fatal("Failed to get hash", zap.Error(err))
 		}
 		pendingActionMap.Add(selpHash, 1)
-		atomic.AddUint64(&totalTsfSentToAPI, 1)
 	}
-
 	if wg != nil {
 		wg.Done()
 	}
@@ -701,7 +716,6 @@ func CheckPendingActionList(
 				return false
 			}
 			if receipt.Status == uint64(iotextypes.ReceiptStatus_Success) {
-
 				pbAct := selp.Envelope.Proto()
 
 				switch {
@@ -735,6 +749,7 @@ func CheckPendingActionList(
 
 					updateExecutionExpectedBalanceMap(balancemap, executoraddr.String(), selp.GasLimit(), selp.GasPrice())
 				case pbAct.GetStakeCreate() != nil:
+					fmt.Printf("\n\nRemove stake\n")
 					act := &action.CreateStake{}
 					if err := act.LoadProto(pbAct.GetStakeCreate()); err != nil {
 						retErr = err
@@ -761,6 +776,8 @@ func CheckPendingActionList(
 				atomic.AddUint64(&totalTsfFailed, 1)
 			}
 			pendingActionMap.Remove(selphash)
+		} else {
+			fmt.Println(err)
 		}
 		return true
 	})
