@@ -321,7 +321,7 @@ func SendAction(elp action.Envelope, signer string) error {
 		elp.SetNonce(nonce)
 	}
 
-	sealed, err := action.Sign(elp, prvKey)
+	sealed, err := action.RLPSign(elp, prvKey)
 	prvKey.Zero()
 	if err != nil {
 		return output.NewError(output.CryptoError, "failed to sign action", err)
