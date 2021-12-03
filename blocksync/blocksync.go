@@ -150,7 +150,8 @@ func (bs *blockSyncer) commitBlocks(blks []*peerBlock) bool {
 			continue
 		}
 		err := bs.commitBlockHandler(blk.block)
-		if err == nil {
+		switch errors.Cause(err) {
+		case nil:
 			return true
 		}
 		bs.peerBlockList.Store(blk.pid, true)
@@ -227,7 +228,7 @@ func (bs *blockSyncer) ProcessBlock(ctx context.Context, peer string, blk *block
 
 	_, ok := bs.peerBlockList.Load(peer)
 	if ok {
-		log.L().Info("peer in block list.")
+		log.L().Info("peer in block list.", zap.String("peer", peer))
 		return nil
 	}
 
