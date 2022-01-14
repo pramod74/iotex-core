@@ -257,15 +257,31 @@ func (svr *Web3Server) handlePOSTReq(req *http.Request) interface{} {
 				zap.String("requestParams", fmt.Sprintf("%+v", web3Req)),
 				zap.Error(err))
 		}
-		web3Resps = append(web3Resps, packAPIResult(res, err, int(web3Req.Get("id").Int())))
+		resp := packAPIResult(res, err, int(web3Req.Get("id").Int()))
+		web3Resps = append(web3Resps, resp)
 		web3ServerMtc.WithLabelValues(method.(string)).Inc()
 		web3ServerMtc.WithLabelValues("requests_total").Inc()
+		if method == "eth_estimateGas" && catchCreateLock(params) {
+			log.L().Error("catchCreateLock",
+				zap.String("requestParams", fmt.Sprintf("%+v", params)),
+				zap.String("response", fmt.Sprintf("%+v", resp)))
+		}
 	}
 
 	if len(web3Resps) == 1 {
 		return web3Resps[0]
 	}
 	return web3Resps
+}
+
+func catchCreateLock(in interface{}) bool {
+	from, to, _, _, _, err := parseCallObject(in)
+	if err != nil {
+		return false
+	}
+	// from = 0x6Aa777Af997f90e9AbbdD6E7AFA648909A5078A0
+	// to = 0x2530B4A59bf149Fb7A1c11c5F3779943dCfa6152
+	return (from.String() == "io1d2nh0tue07gwn2aa6mn6lfjgjzd9q79qhzg9mq") && (to == "io1y5ctffvm79ylk7suz8zlxaueg0w05c2jz3d0eh")
 }
 
 func parseWeb3Reqs(req *http.Request) ([]gjson.Result, error) {
