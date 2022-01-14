@@ -254,8 +254,8 @@ func (svr *Web3Server) handlePOSTReq(req *http.Request) interface{} {
 		// if err != nil {
 		// temporally used for monitor and debug
 		log.L().Error("web3server",
-			zap.String("input", fmt.Sprintf("%+v", params)),
 			zap.String("requestParams", fmt.Sprintf("%+v", web3Req)),
+			zap.String("output", fmt.Sprintf("%+v", res)),
 			zap.Error(err))
 		// }
 		web3Resps = append(web3Resps, packAPIResult(res, err, int(web3Req.Get("id").Int())))
