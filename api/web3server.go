@@ -251,12 +251,13 @@ func (svr *Web3Server) handlePOSTReq(req *http.Request) interface{} {
 			err := errors.Wrapf(errors.New("web3 method not found"), "method: %s\n", web3Req.Get("method"))
 			return packAPIResult(nil, err, 0)
 		}
-		if err != nil {
-			// temporally used for monitor and debug
-			log.L().Error("web3server",
-				zap.String("requestParams", fmt.Sprintf("%+v", web3Req)),
-				zap.Error(err))
-		}
+		// if err != nil {
+		// temporally used for monitor and debug
+		log.L().Error("web3server",
+			zap.String("input", fmt.Sprintf("%+v", params)),
+			zap.String("requestParams", fmt.Sprintf("%+v", web3Req)),
+			zap.Error(err))
+		// }
 		web3Resps = append(web3Resps, packAPIResult(res, err, int(web3Req.Get("id").Int())))
 		web3ServerMtc.WithLabelValues(method.(string)).Inc()
 		web3ServerMtc.WithLabelValues("requests_total").Inc()
